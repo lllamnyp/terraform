@@ -19,6 +19,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hcldec"
+	"github.com/hashicorp/terraform/internal/addrs"
 	"github.com/hashicorp/terraform/internal/backend"
 	"github.com/hashicorp/terraform/internal/cloud"
 	"github.com/hashicorp/terraform/internal/command/arguments"
@@ -1329,7 +1330,16 @@ func (m *Meta) backendConfigNeedsMigration(c *configs.Backend, s *legacy.Backend
 
 	schema := b.ConfigSchema()
 	decSpec := schema.NoneRequired().DecoderSpec()
-	givenVal, diags := hcldec.Decode(c.Config, decSpec, nil)
+
+	terraform.DefaultEvaluator.Meta.OriginalWorkingDir = m.WorkingDir.OriginalWorkingDir()
+	scope := terraform.DefaultEvaluationStateData.Evaluator.Scope(terraform.DefaultEvaluationStateData, nil, nil)
+	ctx, _ := scope.EvalContext([]*addrs.Reference{
+		{Subject: addrs.PathAttr{Name: "cwd"}},
+		{Subject: addrs.PathAttr{Name: "root"}},
+		{Subject: addrs.PathAttr{Name: "module"}},
+	})
+
+	givenVal, diags := hcldec.Decode(c.Config, decSpec, ctx)
 	if diags.HasErrors() {
 		log.Printf("[TRACE] backendConfigNeedsMigration: failed to decode given config; migration codepath must handle problem: %s", diags.Error())
 		return true // let the migration codepath deal with these errors
@@ -1366,7 +1376,16 @@ func (m *Meta) backendInitFromConfig(c *configs.Backend) (backend.Backend, cty.V
 
 	schema := b.ConfigSchema()
 	decSpec := schema.NoneRequired().DecoderSpec()
-	configVal, hclDiags := hcldec.Decode(c.Config, decSpec, nil)
+
+	terraform.DefaultEvaluator.Meta.OriginalWorkingDir = m.WorkingDir.OriginalWorkingDir()
+	scope := terraform.DefaultEvaluationStateData.Evaluator.Scope(terraform.DefaultEvaluationStateData, nil, nil)
+	ctx, _ := scope.EvalContext([]*addrs.Reference{
+		{Subject: addrs.PathAttr{Name: "cwd"}},
+		{Subject: addrs.PathAttr{Name: "root"}},
+		{Subject: addrs.PathAttr{Name: "module"}},
+	})
+
+	configVal, hclDiags := hcldec.Decode(c.Config, decSpec, ctx)
 	diags = diags.Append(hclDiags)
 	if hclDiags.HasErrors() {
 		return nil, cty.NilVal, diags
